@@ -19,6 +19,7 @@ hidden_collections = ['hidden', 'collection', 'list']
 
 
 def seconds2human(seconds):
+    '''Convert numeric seconds to a human readable string.'''
     days = int((seconds // 3600) // 24)
     hours = int((seconds // 3600) % 24)
     minutes = int((seconds // 60) % 60)
@@ -36,6 +37,7 @@ def seconds2human(seconds):
 
 
 def create_db(dbname):
+    '''Create SQLite cache database.'''
     print('%s database does not exist.  Creating...' % (dbname),
           file=sys.stderr)
     sql = '''
@@ -49,6 +51,7 @@ CREATE TABLE records (
 
 
 def get_invenio_record(recid):
+    '''Retrieve a single record via Invenio API.'''
     record = ''
     try:
         record = print_record(
@@ -73,6 +76,7 @@ def get_invenio_record(recid):
     
 
 def get_sqlite_record(db, recid):
+    '''Retrieve a single record from SQLite cache database.'''
     sql = '''
 SELECT record
   FROM records
@@ -88,6 +92,7 @@ SELECT record
         
 
 def get_deleted_record(db, recid):
+    '''Create an empty Marc21 record for a recid.'''
     fmt = '''001 __ %s
 980 __ $c DELETED
 '''
@@ -95,6 +100,8 @@ def get_deleted_record(db, recid):
         
 
 def update_db(db, since, verbose):
+    '''Retrieve Invenio records since last time, and update SQLite
+database.'''
     sql = '''
 REPLACE INTO records
       VALUES (?, ?);'''
@@ -166,6 +173,7 @@ REPLACE INTO records
 
 
 def dump_db(db):
+    '''Dump SQLite database to standard output.'''
     sql = '''
   SELECT record
     FROM records
