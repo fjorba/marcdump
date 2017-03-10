@@ -91,7 +91,7 @@ SELECT record
     return record
         
 
-def get_deleted_record(db, recid):
+def get_deleted_record(recid):
     '''Create an empty Marc21 record for a recid.'''
     fmt = '''001 __ %s
 980 __ $c DELETED
