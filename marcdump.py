@@ -36,7 +36,7 @@ def seconds2human(seconds):
     return human
 
 
-def create_db(dbname):
+def db_create(dbname):
     '''Create SQLite cache database.'''
     print('%s database does not exist.  Creating...' % (dbname),
           file=sys.stderr)
@@ -50,7 +50,7 @@ CREATE TABLE records (
     db.close()
 
 
-def get_invenio_record(recid):
+def invenio_get_record(recid):
     '''Retrieve a single record via Invenio API.'''
     record = ''
     try:
@@ -75,7 +75,7 @@ def get_invenio_record(recid):
     return record
     
 
-def get_sqlite_record(db, recid):
+def db_get_record(db, recid):
     '''Retrieve a single record from SQLite cache database.'''
     sql = '''
 SELECT record
@@ -91,7 +91,7 @@ SELECT record
     return record
         
 
-def get_deleted_record(recid):
+def invenio_get_deleted_record(recid):
     '''Create an empty Marc21 record for a recid.'''
     fmt = '''001 __ %s
 980 __ $c DELETED
@@ -99,7 +99,7 @@ def get_deleted_record(recid):
     return fmt % (recid)
         
 
-def update_db(db, since, verbose):
+def db_update(db, since, verbose):
     '''Retrieve Invenio records since last time, and update SQLite
 database.'''
     sql = '''
@@ -132,7 +132,7 @@ REPLACE INTO records
     print('Updating %s records...' % (len(recids)), file=sys.stderr)
     n = 0
     for recid in recids:
-        record = get_invenio_record(recid)
+        record = invenio_get_record(recid)
         values = (recid, record)
         try:
             db.execute(sql, values)
@@ -160,9 +160,9 @@ REPLACE INTO records
         print('Searching for deleted records...', file=sys.stderr)
     deleted_recids = search_pattern(p='deleted', f='980').tolist()
     for recid in deleted_recids:
-        record = get_sqlite_record(db, recid)
+        record = db_get_record(db, recid)
         if not 'DELETED' in record:
-            record = get_deleted_record(recid)
+            record = invenio_get_deleted_record(recid)
             values = (recid, unicode(record, 'utf-8'))
             db.execute(sql, values)
             n += 1
@@ -172,7 +172,7 @@ REPLACE INTO records
     return n
 
 
-def dump_db(db):
+def db_dump(db):
     '''Dump SQLite database to standard output.'''
     sql = '''
   SELECT record
@@ -228,14 +228,14 @@ def main():
     if os.path.isfile(dbname):
         since_mtime = os.path.getmtime(dbname)
     else:
-        create_db(dbname)
+        db_create(dbname)
         since_mtime = 0
         verbose = True
     db = sqlite3.connect(dbname)
     if 'update' in actions:
-        update_db(db, since_mtime, verbose)
+        db_update(db, since_mtime, verbose)
     if 'dump' in actions:
-        dump_db(db)
+        db_dump(db)
     db.close()
 
 
