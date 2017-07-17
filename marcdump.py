@@ -50,6 +50,54 @@ CREATE TABLE records (
     db.close()
 
 
+def db_get_all_recids(db):
+    '''Retrieve all recids from SQLite cache database.'''
+    sql = '''
+SELECT recid
+  FROM records;'''
+    cursor = db.cursor()
+    cursor.execute(sql)
+    recids = cursor.fetchall()
+    recids = [recid[0] for recid in recids]
+    return recids
+
+
+def db_get_record(db, recid):
+    '''Retrieve a single record from SQLite cache database.'''
+    sql = '''
+SELECT record
+  FROM records
+ WHERE recid=?;'''
+    cursor = db.cursor()
+    values = (recid,)
+    record = ''
+    cursor.execute(sql, values)
+    fields = cursor.fetchone()
+    if fields:
+        record = fields[0]
+    return record
+
+
+def db_delete_record(db, recid):
+    '''Delete a single record from SQLite cache database.'''
+    sql = '''
+DELETE
+  FROM records
+ WHERE recid=?;'''
+    values = (recid,)
+    db.execute(sql, values)
+    return True
+
+
+def invenio_get_all_recids(hidden_collections):
+    '''Get all recids stored in Invenio database.'''
+    recids = perform_request_search()
+    if hidden_collections:
+        hidden_recids = perform_request_search(c=hidden_collections)
+        recids.extend(hidden_recids)
+    return recids
+
+
 def invenio_get_record(recid):
     '''Retrieve a single record via Invenio API.'''
     record = ''
@@ -73,23 +121,7 @@ def invenio_get_record(recid):
     except UnicodeDecodeError:
         print('UnicodeDecodeError record %s' % (recid), file=sys.stderr)
     return record
-    
 
-def db_get_record(db, recid):
-    '''Retrieve a single record from SQLite cache database.'''
-    sql = '''
-SELECT record
-  FROM records
- WHERE recid=?;'''
-    cursor = db.cursor()
-    values = (recid,)
-    record = ''
-    cursor.execute(sql, values)
-    fields = cursor.fetchone()
-    if fields:
-        record = fields[0]
-    return record
-        
 
 def invenio_get_deleted_record(recid):
     '''Create an empty Marc21 record for a recid.'''
@@ -97,11 +129,11 @@ def invenio_get_deleted_record(recid):
 980 __ $c DELETED
 '''
     return fmt % (recid)
-        
+
 
 def db_update(db, since, verbose):
     '''Retrieve Invenio records since last time, and update SQLite
-database.'''
+    database.'''
     sql = '''
 REPLACE INTO records
       VALUES (?, ?);'''
@@ -123,7 +155,6 @@ REPLACE INTO records
         hidden_recids = perform_request_search(
             c=hidden_collections, dt='m', d1y=year, d1m=month, d1d=day)
         recids.extend(hidden_recids)
-    recids.sort()
     if not recids:
         if verbose:
             print('No records to update.', file=sys.stderr)
@@ -131,7 +162,7 @@ REPLACE INTO records
     start_time = int(time.time())
     print('Updating %s records...' % (len(recids)), file=sys.stderr)
     n = 0
-    for recid in recids:
+    for recid in sorted(recids):
         record = invenio_get_record(recid)
         values = (recid, record)
         try:
@@ -150,7 +181,7 @@ REPLACE INTO records
                     seconds2human(remaining_time), time_per_record),
                       file=sys.stderr)
             db.commit()
-    
+
     if verbose:
         print('All %s records updated.' % (len(recids)), file=sys.stderr)
     db.commit()
@@ -166,8 +197,36 @@ REPLACE INTO records
             values = (recid, unicode(record, 'utf-8'))
             db.execute(sql, values)
             n += 1
+    db.commit()
+
+    # Perform a final sync comparing the existence of recids
+    invenio_recids = set(invenio_get_all_recids(hidden_collections))
+    db_recids = set(db_get_all_recids(db))
+
+    deleted_recids = db_recids - invenio_recids
+    for recid in deleted_recids:
+        db_delete_record(db, recid)
+        n += 1
+    db.commit()
+
     if verbose:
         print('Updated %s deleted records.' % (n), file=sys.stderr)
+
+    n = 0
+    if verbose:
+        print('Searching for missing records...', file=sys.stderr)
+    missing_recids = invenio_recids - db_recids
+    for recid in missing_recids:
+        record = invenio_get_record(recid)
+        values = (recid, record)
+        try:
+            db.execute(sql, values)
+        except sqlite3.ProgrammingError:
+            print('Unrecoverable encoding error: %s' % (recid),
+                  file=sys.stderr)
+        n += 1
+    if verbose:
+        print('Updated %s missing records.' % (n), file=sys.stderr)
     db.commit()
     return n
 
@@ -202,7 +261,7 @@ several hours to fill it (depending on database size), verbose output
 will automatically be activated to show expected remaining time.''' % (
         os.path.split(sys.argv[0])[-1]), file=sys.stderr)
     sys.exit(1)
-        
+
 
 def main():
     args = sys.argv[1:]
